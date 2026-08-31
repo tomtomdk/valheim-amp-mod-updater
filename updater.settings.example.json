@@ -1,0 +1,26 @@
+{
+  "amp": {
+    "instance_name": "MyValheimInstance",
+    "user": "amp",
+    "ampinstmgr": "/opt/cubecoders/amp/ampinstmgr"
+  },
+  "valheim": {
+    "target_root": "/home/amp/.ampdata/instances/MyValheimInstance/Valheim/896660"
+  },
+  "updater": {
+    "dir": "/opt/valheim-modupdater",
+    "mods_config": "/opt/valheim-modupdater/mods.json",
+    "state_file": "/opt/valheim-modupdater/state.json",
+    "sync_script": "/opt/valheim-modupdater/thunderstore_sync.py",
+    "lock_file": "/run/lock/valheim-modupdater.lock"
+  },
+  "backups": {
+    "dir": "/opt/valheim-modupdater/backups/config-only",
+    "max_count": 5
+  },
+  "restart": {
+    "wait_seconds": 900,
+    "stop_timeout_seconds": 120,
+    "start_timeout_seconds": 180
+  }
+}

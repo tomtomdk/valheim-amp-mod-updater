@@ -1,0 +1,11 @@
+mods.json
+state.json
+updater.settings.json
+updater.env
+backups/
+quarantine/
+__pycache__/
+*.pyc
+*.tar.gz
+*.zip
+*.log
