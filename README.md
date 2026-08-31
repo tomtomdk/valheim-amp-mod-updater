@@ -1,6 +1,8 @@
-# Valheim Server Mod Updater for AMP
+# Valheim AMP Mod Updater
 
 A small updater for CubeCoders AMP Valheim servers that checks Thunderstore, downloads newer mod versions, backs up `BepInEx/config`, applies updates, and restarts the AMP instance only when updates are needed.
+
+Running a plain Docker Valheim server instead of AMP? Use the Docker-specific sibling project: [valheim-docker-mod-updater](https://github.com/tomtomdk/valheim-docker-mod-updater).
 
 ## What it does
 
@@ -157,3 +159,4 @@ sudo systemctl enable --now valheim-modupdate.timer
 ## Notes
 
 This project intentionally does not include a live `mods.json`, `state.json`, webhooks, local backups, or server-specific mod cleanup rules. Keep your real `mods.json` private if it contains a Discord webhook.
+
