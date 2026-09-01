@@ -22,5 +22,12 @@
     "wait_seconds": 900,
     "stop_timeout_seconds": 120,
     "start_timeout_seconds": 180
+  },
+  "rcon": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 2458,
+    "password_file": "/opt/valheim-modupdater/rcon_password",
+    "warning_seconds": "900 600 300 60 30 10"
   }
 }

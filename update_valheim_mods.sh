@@ -78,6 +78,12 @@ WAIT_SECONDS="${WAIT_SECONDS_OVERRIDE:-$(setting WAIT_SECONDS restart.wait_secon
 STOP_TIMEOUT="$(setting STOP_TIMEOUT restart.stop_timeout_seconds "120")"
 START_TIMEOUT="$(setting START_TIMEOUT restart.start_timeout_seconds "180")"
 LOCK_FILE="$(setting LOCK_FILE updater.lock_file "/run/lock/valheim-modupdater.lock")"
+RCON_ENABLED="$(setting RCON_ENABLED rcon.enabled "false")"
+RCON_HOST="$(setting RCON_HOST rcon.host "127.0.0.1")"
+RCON_PORT="$(setting RCON_PORT rcon.port "2458")"
+RCON_PASSWORD_FILE="$(setting RCON_PASSWORD_FILE rcon.password_file "${UPDATER_DIR}/rcon_password")"
+RCON_WARN_SECONDS="$(setting RCON_WARN_SECONDS rcon.warning_seconds "900 600 300 60 30 10")"
+read -r -a RCON_WARNING_MARKS <<<"${RCON_WARN_SECONDS}"
 
 BEPINEX_DIR="${TARGET_ROOT}/BepInEx"
 CONFIG_DIR="${BEPINEX_DIR}/config"
@@ -119,6 +125,143 @@ human_time() {
     else
         printf '%sm %ss' "$((seconds / 60))" "$((seconds % 60))"
     fi
+}
+
+rcon_is_enabled() {
+    case "${RCON_ENABLED,,}" in
+        1|true|yes|on)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+rcon_command() {
+    local command="$1"
+    local output
+
+    if ! rcon_is_enabled; then
+        return 0
+    fi
+
+    if [[ ! -r "${RCON_PASSWORD_FILE}" ]]; then
+        echo "[WARN] RCON password file is not readable; skipping in-game notice."
+        return 0
+    fi
+
+    set +e
+    output="$(
+        python3 - "${RCON_HOST}" "${RCON_PORT}" "${RCON_PASSWORD_FILE}" "${command}" <<'PY' 2>&1
+import socket
+import struct
+import sys
+
+
+def packet(request_id, packet_type, payload):
+    body = payload.encode("ascii", errors="replace") + b"\x00\x00"
+    return struct.pack("<iii", len(body) + 8, request_id, packet_type) + body
+
+
+def receive(sock):
+    header = sock.recv(4)
+    if len(header) != 4:
+        raise RuntimeError("No RCON response header")
+    size = struct.unpack("<i", header)[0]
+    data = b""
+    while len(data) < size:
+        chunk = sock.recv(size - len(data))
+        if not chunk:
+            break
+        data += chunk
+    if len(data) < 8:
+        raise RuntimeError("Short RCON response")
+    request_id, packet_type = struct.unpack("<ii", data[:8])
+    payload = data[8:].rstrip(b"\x00").decode("ascii", errors="replace")
+    return request_id, packet_type, payload
+
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+password_file = sys.argv[3]
+command = sys.argv[4]
+
+with open(password_file, "r", encoding="utf-8") as handle:
+    password = handle.read().strip()
+
+with socket.create_connection((host, port), timeout=8) as sock:
+    sock.settimeout(8)
+    sock.sendall(packet(1, 3, password))
+    login_id, _, _ = receive(sock)
+    if login_id == -1:
+        raise SystemExit("RCON login failed")
+    sock.sendall(packet(2, 2, command))
+    _, packet_type, response = receive(sock)
+    if packet_type == -1:
+        raise SystemExit(response or "RCON command failed")
+PY
+    )"
+    local rc=$?
+    set -e
+
+    if (( rc != 0 )); then
+        echo "[WARN] RCON command failed; continuing without blocking updater."
+        if [[ -n "${output}" ]]; then
+            echo "[WARN] ${output}"
+        fi
+    fi
+}
+
+send_restart_warning() {
+    local seconds="$1"
+    local remaining
+    local message
+
+    remaining="$(human_time "${seconds}")"
+    message="Server restart for mod updates in ${remaining}. Please get to a safe place."
+
+    echo "[INFO] Sending in-game restart warning: ${remaining}"
+    rcon_command "broadcast center <color=orange><size=20>${message}</size></color>"
+    rcon_command "broadcast side ${message}"
+}
+
+wait_with_restart_warnings() {
+    local total="$1"
+    local remaining="${total}"
+    local mark
+    local sleep_for
+
+    for mark in "${RCON_WARNING_MARKS[@]}"; do
+        if ! [[ "${mark}" =~ ^[0-9]+$ ]]; then
+            echo "[WARN] Ignoring invalid RCON warning mark: ${mark}"
+            continue
+        fi
+
+        if (( mark > total )); then
+            continue
+        fi
+
+        sleep_for=$((remaining - mark))
+        if (( sleep_for > 0 )); then
+            sleep "${sleep_for}"
+        fi
+
+        remaining="${mark}"
+        send_restart_warning "${mark}"
+    done
+
+    if (( remaining > 0 )); then
+        sleep "${remaining}"
+    fi
+}
+
+notify_pre_stop() {
+    echo "[INFO] Sending final in-game save/restart notice."
+    rcon_command "broadcast center <color=orange><size=20>Saving world now. Restart incoming.</size></color>"
+    rcon_command "broadcast side Saving world now. Restart incoming."
+    rcon_command "save"
+    sleep 3
 }
 
 is_up() {
@@ -344,7 +487,7 @@ echo "[INFO] Mod updates are available."
 if (( WAS_RUNNING == 1 && WAIT_SECONDS > 0 )); then
     echo "[INFO] Waiting $(human_time "${WAIT_SECONDS}") before restart."
     echo "[INFO] Restart time: $(date -d "@${restart_unix}")"
-    sleep "${WAIT_SECONDS}"
+    wait_with_restart_warnings "${WAIT_SECONDS}"
 elif (( WAS_RUNNING == 1 )); then
     echo "[INFO] Restart delay disabled."
 else
@@ -369,6 +512,7 @@ fi
 
 if (( WAS_RUNNING == 1 )); then
     echo "[INFO] Stopping AMP instance: ${INSTANCE_NAME}"
+    notify_pre_stop
     as_amp "${AMPINST}" stop "${INSTANCE_NAME}"
 
     if ! wait_for_down; then

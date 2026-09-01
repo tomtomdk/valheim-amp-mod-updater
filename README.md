@@ -12,6 +12,7 @@ Running a plain Docker Valheim server instead of AMP? Use the Docker-specific si
 - Downloads and extracts Thunderstore packages into the Valheim server folder.
 - Supports package payloads under `BepInEx/`, `config/`, and top-level `patchers/`.
 - Posts optional Discord webhook notifications if `discord_webhook` is set.
+- Can send in-game restart warnings and a pre-stop `save` through AviiNL RCON plus JereKuusela RCON Commands.
 - Backs up `BepInEx/config` before applying updates.
 - Leaves the server stopped if it was stopped before the updater ran.
 
@@ -82,12 +83,46 @@ Use Thunderstore package keys in `Owner-PackageName` format:
   "discord_webhook": "",
   "mods": [
     "denikson-BepInExPack_Valheim",
-    "ValheimModding-Jotunn"
+    "ValheimModding-Jotunn",
+    "AviiNL-rcon",
+    "JereKuusela-Rcon_Commands",
+    "JereKuusela-Server_devcommands"
   ]
 }
 ```
 
 Leave `discord_webhook` empty to disable Discord messages.
+
+## Optional In-Game Restart Warnings
+
+For in-game notices, install these server-side mods:
+
+- `AviiNL-rcon`
+- `JereKuusela-Rcon_Commands`
+- `JereKuusela-Server_devcommands`
+
+Run the server once so AviiNL creates `BepInEx/config/nl.avii.plugins.rcon.cfg`, then set `enabled = true`, choose a port, and set a strong password. Store the same password in a root-readable file such as:
+
+```bash
+sudo install -m 0600 -o root -g root /dev/null /opt/valheim-modupdater/rcon_password
+sudo nano /opt/valheim-modupdater/rcon_password
+```
+
+Then enable RCON in `updater.settings.json`:
+
+```json
+{
+  "rcon": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 2458,
+    "password_file": "/opt/valheim-modupdater/rcon_password",
+    "warning_seconds": "900 600 300 60 30 10"
+  }
+}
+```
+
+When updates are pending, the wrapper broadcasts warnings during the restart delay and runs `save` just before stopping AMP.
 
 ## Check Without Changing Anything
 

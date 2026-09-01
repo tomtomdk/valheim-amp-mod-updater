@@ -2,6 +2,9 @@
   "discord_webhook": "",
   "mods": [
     "denikson-BepInExPack_Valheim",
-    "ValheimModding-Jotunn"
+    "ValheimModding-Jotunn",
+    "AviiNL-rcon",
+    "JereKuusela-Rcon_Commands",
+    "JereKuusela-Server_devcommands"
   ]
 }
